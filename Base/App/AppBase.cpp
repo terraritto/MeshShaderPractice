@@ -34,6 +34,9 @@ AppBase::AppBase(LPCWSTR title, UINT width, UINT height, HICON icon, HMENU menu,
 	, m_isAllowTearing(false)
 	, m_viewport()
 	, m_scissorRect()
+	// Utility
+	, m_prevCursorX(0)
+	, m_prevCursorY(0)
 	// private D3D
 	, m_swapChain(nullptr)
 {
@@ -52,6 +55,7 @@ AppBase::AppBase(LPCWSTR title, UINT width, UINT height, HICON icon, HMENU menu,
 	m_deviceDesc.EnableDRED = true;
 	m_deviceDesc.EnableBreakOnError = true;
 	m_deviceDesc.EnableBreakOnWarning = true;
+	m_deviceDesc.IsUseMeshlet = true;
 	m_deviceDesc.MaxColorTargetCount = 128;
 	m_deviceDesc.MaxDepthTargetCount = 128;
 	m_deviceDesc.MaxSamplerCount = 128;
@@ -122,6 +126,9 @@ bool AppBase::Initialize()
 
 	// Set focus
 	SetFocus(m_window);
+
+	// Init Timer
+	m_timer.Start();
 
 	return true;
 }
@@ -471,16 +478,29 @@ void AppBase::MainLoop()
 		}
 		else
 		{
+			OnUpdate(m_timer.GetElapsedSec());
 			OnRender();
 		}
 	}
 
 }
 
-LRESULT AppBase::WindowProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp)
+LRESULT CALLBACK AppBase::WindowProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp)
 {
+	AppBase* instance = reinterpret_cast<AppBase*>(GetWindowLongPtr(window, GWLP_USERDATA));
+
 	switch (message)
 	{
+	case WM_CREATE:
+		{
+			auto createStruct = reinterpret_cast<LPCREATESTRUCT>(lp);
+			SetWindowLongPtr(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
+
+			// enable drag and drop.
+			DragAcceptFiles(window, TRUE);
+		}
+		break;
+
 	case WM_PAINT:
 		{
 			PAINTSTRUCT ps;
@@ -497,6 +517,84 @@ LRESULT AppBase::WindowProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp
 
 	default:
 		break;
+	}
+	
+	if (instance != nullptr)
+	{
+		// Camera Process
+		switch (message)
+		{
+		case WM_LBUTTONDOWN:
+		case WM_LBUTTONUP:
+		case WM_LBUTTONDBLCLK:
+		case WM_MBUTTONDOWN:
+		case WM_MBUTTONUP:
+		case WM_MBUTTONDBLCLK:
+		case WM_RBUTTONDOWN:
+		case WM_RBUTTONUP:
+		case WM_RBUTTONDBLCLK:
+		case WM_XBUTTONDOWN:
+		case WM_XBUTTONUP:
+		case WM_XBUTTONDBLCLK:
+		case WM_MOUSEWHEEL:
+		case WM_MOUSEMOVE:
+			{
+				int x = int(LOWORD(lp));
+				int y = int(HIWORD(lp));
+
+				int delta = 0;
+				if (message == WM_MOUSEHWHEEL)
+				{
+					POINT pt;
+					pt.x = x; pt.y = y;
+
+					// Convert Client Axis
+					ScreenToClient(window, &pt);
+					x = pt.x; y = pt.y;
+
+					delta += int(HIWORD(wp));
+				}
+
+				int state = int(LOWORD(wp));
+				bool left = ((state & MK_LBUTTON) != 0);
+				bool right = ((state & MK_RBUTTON) != 0);
+				bool middle = ((state & MK_MBUTTON) != 0);
+
+				Camera::Event args = {};
+
+				if (left)
+				{
+					args.m_type = static_cast<uint32_t>(Camera::EventType::Rotate);
+					args.m_rotateH = DirectX::XMConvertToRadians(-0.5f * (x - instance->m_prevCursorX));
+					args.m_rotateV = DirectX::XMConvertToRadians(0.5f * (y - instance->m_prevCursorY));
+					instance->m_camera.UpdateByEvent(args);
+				}
+				else if (right)
+				{
+					args.m_type = static_cast<uint32_t>(Camera::EventType::Dolly);
+					args.m_dolly = DirectX::XMConvertToRadians(0.5f * (y - instance->m_prevCursorY));
+					instance->m_camera.UpdateByEvent(args);
+				}
+				else if (middle)
+				{
+					args.m_type = static_cast<uint32_t>(Camera::EventType::Move);
+					if (GetAsyncKeyState(VK_MENU) != 0)
+					{
+						args.m_moveX = DirectX::XMConvertToRadians(0.5f * (x - instance->m_prevCursorX));
+						args.m_moveZ = DirectX::XMConvertToRadians(0.5f * (y - instance->m_prevCursorY));
+					}
+					else
+					{
+						args.m_moveX = DirectX::XMConvertToRadians(0.5f * (x - instance->m_prevCursorX));
+						args.m_moveY = DirectX::XMConvertToRadians(0.5f * (y - instance->m_prevCursorY));
+					}
+					instance->m_camera.UpdateByEvent(args);
+				}
+				
+				instance->m_prevCursorX = x; instance->m_prevCursorY = y;
+			}
+			break;
+		}
 	}
 
 	return DefWindowProc(window, message, wp, lp);
@@ -521,4 +619,9 @@ void AppBase::Present(uint32_t syncInterval)
 
 	HRESULT hr = S_OK;
 	hr = m_swapChain->Present(syncInterval, 0);
+}
+
+double AppBase::GetGlobalRelativeTime()
+{
+	return m_timer.GetRelativeTime();
 }

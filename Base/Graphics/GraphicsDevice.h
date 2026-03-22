@@ -41,6 +41,7 @@ struct DeviceDesc
 	bool EnableDRED = true;
 	bool EnableBreakOnWarning = false;
 	bool EnableBreakOnError = true;
+	bool IsUseMeshlet = true;
 };
 
 class GraphicsDevice
@@ -67,6 +68,7 @@ protected:
 	DescriptorHeap* GetSamplerDescriptorHeap();
 	void GetDisplayInfo(DXGI_FORMAT format, std::vector<DisplayInfo>& result);
 	bool IsSupportGpuUploadHeap() const;
+	bool IsUseMeshlet() const;
 
 	// operator
 	ID3D12Device8* operator->() const;
@@ -128,6 +130,7 @@ private:
 	std::array<ComPtr<ID3D12CommandSignature>, MAX_COUNT_COMMAND_SIGNATURE_TYPE> m_commandSignatures;
 
 	bool m_isSupportGpuUploadHeap;
+	bool m_isUseMeshlet;
 
 	VertexBuffer m_quadVb;
 	std::shared_ptr<SpinLock> m_spinLock; // todo: delete?

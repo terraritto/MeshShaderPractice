@@ -1,14 +1,17 @@
 #pragma once
+#define NOMINMAX
 #include <Windows.h>
 #include <iostream>
 #include <format>
 #include <vector>
 #include <wrl.h>
 #include <WinUser.h>
+#include "MeshShaderPractice/Base/Graphics/Camera.h"
 #include "MeshShaderPractice/Base/Graphics/CommandList.h"
 #include "MeshShaderPractice/Base/Graphics/GraphicsProxy.h"
 #include "MeshShaderPractice/Base/Graphics/Target/ColorTarget.h"
 #include "MeshShaderPractice/Base/Graphics/Target/DepthTarget.h"
+#include "MeshShaderPractice/Base/Util/Timer.h"
 
 class AppBase
 {
@@ -32,9 +35,13 @@ protected:
 	// Execute Command and display.
 	void Present(uint32_t syncInterval);
 
+	// for time
+	double GetGlobalRelativeTime();
+
 protected:
 	virtual bool OnInitialize() = 0;
 	virtual bool OnTerminate() = 0;
+	virtual void OnUpdate(double deltaTime) {}
 	virtual void OnRender() = 0;
 
 private:
@@ -89,33 +96,15 @@ protected:
 	std::vector<ColorTarget>	m_colorTarget;
 	DepthTarget					m_depthTarget;
 
-	/*
-	ComPtr<ID3D12Device14> m_device;
-	ComPtr<ID3D12CommandQueue> m_commandQueue;
-	ComPtr<ID3D12CommandAllocator> m_commandAllocator;
-	ComPtr<ID3D12GraphicsCommandList6> m_commandList;
-	ComPtr<IDXGISwapChain4> m_swapChain;
-	ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
-	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
-	ComPtr<ID3D12DescriptorHeap> m_resHeap;
-	ComPtr<ID3D12Resource> m_renderTargets[BUFFER_COUNT];
-	ComPtr<ID3D12Resource> m_depthStencil;
-	
-
-	UINT m_frameIndex;
-	UINT m_rtvDescriptorSize;
-	UINT m_dsvDescriptorSize;
-	UINT m_resDescriptorSize;
-
-	ComPtr<ID3D12Fence> m_fence;
-	HANDLE m_fenceEvent;
-	UINT64 m_fenceValue;
-
-	D3D12_VIEWPORT m_viewport;
-	D3D12_RECT m_scissorRect;
-	*/
+	// Utility
+	int							m_prevCursorX;
+	int							m_prevCursorY;
+	Camera						m_camera;
 
 private:
 	// D3D
 	ComPtr<IDXGISwapChain4> m_swapChain;
+
+	// Utility
+	Timer						m_timer;
 };

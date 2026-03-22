@@ -33,6 +33,7 @@ public:
 
 	// Condition
 	static bool IsSupportGpuUploadHeap();
+	static bool IsUseMeshlet();
 
 	// Resource
 	static void UpdateSubResources(ID3D12GraphicsCommandList* commandList, ID3D12Resource* dstResource, uint32_t subResourceCount, uint32_t subResourceOffset, const D3D12_SUBRESOURCE_DATA* subResources);

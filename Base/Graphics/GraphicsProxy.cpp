@@ -104,6 +104,11 @@ bool GraphicsProxy::IsSupportGpuUploadHeap()
     return GraphicsDevice::Instance().IsSupportGpuUploadHeap();
 }
 
+bool GraphicsProxy::IsUseMeshlet()
+{
+    return GraphicsDevice::Instance().IsUseMeshlet();
+}
+
 void GraphicsProxy::UpdateSubResources(ID3D12GraphicsCommandList* commandList, ID3D12Resource* dstResource, uint32_t subResourceCount, uint32_t subResourceOffset, const D3D12_SUBRESOURCE_DATA* subResources)
 {
     // Invalid data settings.
@@ -180,7 +185,7 @@ void GraphicsProxy::UpdateSubResources(ID3D12GraphicsCommandList* commandList, I
 
         // Mapping for source resource
         BYTE* data = nullptr;
-        hr = srcResource->Map(0, nullptr, reinterpret_cast<void**>(data));
+        hr = srcResource->Map(0, nullptr, reinterpret_cast<void**>(&data));
         if (FAILED(hr))
         {
             ELOGA("Error: ID3D12Resource::Map() Failed. errcode = 0x%x", hr);

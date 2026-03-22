@@ -1,28 +1,34 @@
-#include "IndexBuffer.h"
+#include "ConstantBuffer.h"
 #include "MeshShaderPractice/Base/Graphics/GraphicsProxy.h"
 #include "MeshShaderPractice/Base/Util/Logger.h"
 
-IndexBuffer::IndexBuffer()
-    : m_isSrv(false)
+ConstantBuffer::ConstantBuffer()
 {
-    memset(&m_view, 0, sizeof(m_view));
 }
 
-IndexBuffer::~IndexBuffer()
+ConstantBuffer::~ConstantBuffer()
 {
     Terminate();
 }
 
-bool IndexBuffer::Initialize(uint64_t size, bool isSrv, bool isShortFormat)
+bool ConstantBuffer::Initialize(uint64_t size)
 {
-    auto device = GraphicsProxy::GetD3D12Device();
-
-    if (device == nullptr || size == 0)
+    if (size == 0)
     {
-        ELOGA("Error: IndexBuffer Invalid Argument.");
+        ELOGA("Error : Invalid Argument.");
         return false;
     }
 
+    uint64_t rest = size % 256;
+    if (rest != 0)
+    {
+        ELOGA("Error : ConstantBuffer must be 256 byte alignment!! (size %% 256) = %u", rest);
+        return false;
+    }
+
+    auto device = GraphicsProxy::GetD3D12Device();
+
+    //resource
     D3D12_HEAP_TYPE heapType = GraphicsProxy::IsSupportGpuUploadHeap()
         ? D3D12_HEAP_TYPE_GPU_UPLOAD
         : D3D12_HEAP_TYPE_UPLOAD;
@@ -38,6 +44,7 @@ bool IndexBuffer::Initialize(uint64_t size, bool isSrv, bool isShortFormat)
     // resource
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Alignment = 0;
     desc.Width = size;
     desc.Height = 1;
     desc.DepthOrArraySize = 1;
@@ -94,99 +101,54 @@ bool IndexBuffer::Initialize(uint64_t size, bool isSrv, bool isShortFormat)
         }
     }
 
-    // set view
-    m_view.BufferLocation = m_resource->GetGPUVirtualAddress();
-    m_view.SizeInBytes = UINT(size);
-    m_view.Format = isShortFormat ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
-
-    // SRV
-    m_isSrv = isSrv;
-
-    if (m_isSrv)
-    {
-        // alloc
-        auto handleSRV = GraphicsProxy::GetResourceDescriptorHeap()->Allocate(1);
-        if (!handleSRV.IsValid())
-        {
-            ELOGA("Error: DescriptorHeap::Alloc() Failed.");
-            return false;
-        }
-
-        // resource
-        UINT stride = sizeof(uint32_t) * 3;
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Buffer.FirstElement = 0;
-        srvDesc.Buffer.NumElements = size / stride;
-        srvDesc.Buffer.StructureByteStride = stride;
-        srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-
-        m_srvHolder = DescriptorHolder(DescriptorHolder::HEAP_RES, handleSRV);
-        device->CreateShaderResourceView(m_resource.Get(), &srvDesc, GetCpuHandleSRV());
-    }
+    m_size = size;
 
     return true;
 }
 
-void IndexBuffer::Terminate()
+void ConstantBuffer::Terminate()
 {
     ID3D12Resource* resource = m_resource.Detach();
     GraphicsProxy::Dispose(resource);
-    memset(&m_view, 0, sizeof(m_view));
-    m_srvHolder.Reset();
     m_holder.Reset();
+    m_size = 0;
 }
 
-void* IndexBuffer::Map()
+void* ConstantBuffer::Map()
 {
-    if (m_resource.Get() == nullptr)
-    {
-        return nullptr;
-    }
+    if (m_resource.Get() == nullptr) { return nullptr; }
 
-    void* pointer = nullptr;
-    HRESULT hr = m_resource->Map(0, nullptr, &pointer);
+    void* data = nullptr;
+    HRESULT hr = m_resource->Map(0, nullptr, &data);
     if (FAILED(hr))
     {
-        ELOGA("Error: ID3D12Resource::Map() Failed. errcode = 0x%x", hr);
+        ELOGA("Error : ID3D12Resource::Map() Failed. errcode = 0x%x", hr);
         return nullptr;
     }
-
-    return pointer;
+    return data;
 }
 
-void IndexBuffer::UnMap()
+void ConstantBuffer::UnMap()
 {
-    if (m_resource.Get() == nullptr)
-    {
-        return;
-    }
+    if (m_resource.Get() == nullptr) { return; }
 
     m_resource->Unmap(0, nullptr);
 }
 
-void IndexBuffer::SetDebugName(LPCWSTR tag)
+void ConstantBuffer::SetDebugName(LPCWSTR tag)
 {
-    if (m_resource)
+    if (m_resource.Get())
     {
         m_resource->SetName(tag);
     }
 }
 
-D3D12_INDEX_BUFFER_VIEW IndexBuffer::GetView() const
-{
-    return m_view;
-}
-
-ID3D12Resource* IndexBuffer::GetResource() const
+ID3D12Resource* ConstantBuffer::GetResource() const
 {
     return m_resource.Get();
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS IndexBuffer::GetGpuAddress() const
+D3D12_GPU_VIRTUAL_ADDRESS ConstantBuffer::GetGpuAddress() const
 {
     D3D12_GPU_VIRTUAL_ADDRESS result = {};
     if (m_resource.Get() != nullptr)
@@ -196,14 +158,7 @@ D3D12_GPU_VIRTUAL_ADDRESS IndexBuffer::GetGpuAddress() const
     return result;
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE IndexBuffer::GetCpuHandleSRV() const
+uint64_t ConstantBuffer::GetSize() const
 {
-    assert(m_isSrv);
-    return m_srvHolder.GetCpuHandle();
-}
-
-D3D12_GPU_DESCRIPTOR_HANDLE IndexBuffer::GetGpuHandleSRV() const
-{
-    assert(m_isSrv);
-    return m_srvHolder.GetGpuHandle();
+    return m_size;
 }

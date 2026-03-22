@@ -433,6 +433,33 @@ bool GraphicsDevice::Initialize(const DeviceDesc& deviceDesc)
 		m_isSupportGpuUploadHeap = options.GPUUploadHeapSupported;
 	}
 
+	// Check Meshlet support
+	if (deviceDesc.IsUseMeshlet)
+	{
+		// shader model check
+		{
+			D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_5 };
+			hr = m_device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+			if (FAILED(hr) || (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_5))
+			{
+				ELOGA("Error: Shader Model 6.5 not Supported.");
+				return false;
+			}
+		}
+
+		// Mesh Shader Support Check
+		{
+			D3D12_FEATURE_DATA_D3D12_OPTIONS7 features = {};
+			hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &features, sizeof(features));
+			if (FAILED(hr) || (features.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED))
+			{
+				ELOGA("Error: Mesh Shader not Supported.");
+				return false;
+			}
+		}
+	}
+	m_isUseMeshlet = deviceDesc.IsUseMeshlet;
+
 	return true;
 }
 
@@ -574,6 +601,11 @@ void GraphicsDevice::GetDisplayInfo(DXGI_FORMAT format, std::vector<DisplayInfo>
 bool GraphicsDevice::IsSupportGpuUploadHeap() const
 {
 	return m_isSupportGpuUploadHeap;
+}
+
+bool GraphicsDevice::IsUseMeshlet() const
+{
+	return m_isUseMeshlet;
 }
 
 ID3D12Device8* GraphicsDevice::operator->() const

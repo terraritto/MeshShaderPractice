@@ -118,26 +118,10 @@ bool MeshShaderPipelineState::Initialize(const MESH_SHADER_PIPELINE_STATE_DESC* 
     auto device = GraphicsProxy::GetD3D12Device();
     HRESULT hr = S_OK;
 
-    // shader model check
+    if (GraphicsProxy::IsUseMeshlet() == false)
     {
-        D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_5 };
-        hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
-        if (FAILED(hr) || (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_5))
-        {
-            ELOGA("Error: Shader Model 6.5 not Supported.");
-            return false;
-        }
-    }
-
-    // Mesh Shader Support Check
-    {
-        D3D12_FEATURE_DATA_D3D12_OPTIONS7 features = {};
-        hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &features, sizeof(features));
-        if (FAILED(hr) || (features.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED))
-        {
-            ELOGA("Error: Mesh Shader not Supported.");
-            return false;
-        }
+        ELOGA("ELLOR : Meshlet can't use settings.");
+        return false;
     }
 
     m_desc = *desc;
