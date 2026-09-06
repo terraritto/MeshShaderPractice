@@ -60,44 +60,47 @@ bool ConstantBuffer::Initialize(uint64_t size)
 
     // allocate
     D3D12MA::Allocator* allocator = GraphicsProxy::GetD3D12MA();
-    if (allocator != nullptr)
+    for (int i = 0; i < 2; i++)
     {
-        D3D12MA::ALLOCATION_DESC allocDesc = {};
-        allocDesc.HeapType = heapType;
-
-        ComPtr<D3D12MA::Allocation> allocation = nullptr;
-
-        HRESULT hr = allocator->CreateResource
-        (
-            &allocDesc,
-            &desc,
-            state,
-            nullptr,
-            allocation.GetAddressOf(),
-            IID_PPV_ARGS(m_resource.GetAddressOf()));
-        if (FAILED(hr))
+        if (allocator != nullptr)
         {
-            ELOGA("Error: D3D12MA::Allocator::CreateResource() Failed. errcode=0x%x", hr);
-            return false;
+            D3D12MA::ALLOCATION_DESC allocDesc = {};
+            allocDesc.HeapType = heapType;
+
+            ComPtr<D3D12MA::Allocation> allocation = nullptr;
+
+            HRESULT hr = allocator->CreateResource
+            (
+                &allocDesc,
+                &desc,
+                state,
+                nullptr,
+                allocation.GetAddressOf(),
+                IID_PPV_ARGS(m_resource[i].GetAddressOf()));
+            if (FAILED(hr))
+            {
+                ELOGA("Error: D3D12MA::Allocator::CreateResource() Failed. errcode=0x%x", hr);
+                return false;
+            }
+
+            m_holder[i].Attach(allocation);
         }
-
-        m_holder.Attach(allocation);
-    }
-    else
-    {
-        HRESULT hr = device->CreateCommittedResource
-        (
-            &prop,
-            flags,
-            &desc,
-            state,
-            nullptr,
-            IID_PPV_ARGS(m_resource.GetAddressOf())
-        );
-        if (FAILED(hr))
+        else
         {
-            ELOGA("Error: ID3D12Device::CreateCommittedResource() Failed. errcode = 0x%x", hr);
-            return false;
+            HRESULT hr = device->CreateCommittedResource
+            (
+                &prop,
+                flags,
+                &desc,
+                state,
+                nullptr,
+                IID_PPV_ARGS(m_resource[i].GetAddressOf())
+            );
+            if (FAILED(hr))
+            {
+                ELOGA("Error: ID3D12Device::CreateCommittedResource() Failed. errcode = 0x%x", hr);
+                return false;
+            }
         }
     }
 
@@ -108,18 +111,34 @@ bool ConstantBuffer::Initialize(uint64_t size)
 
 void ConstantBuffer::Terminate()
 {
-    ID3D12Resource* resource = m_resource.Detach();
-    GraphicsProxy::Dispose(resource);
-    m_holder.Reset();
+    for (int i = 0; i < 2; i++)
+    {
+        ID3D12Resource* resource = m_resource[i].Detach();
+        GraphicsProxy::Dispose(resource);
+        m_holder[i].Reset();
+    }
     m_size = 0;
 }
 
-void* ConstantBuffer::Map()
+void ConstantBuffer::Update(const void* src, uint64_t size, uint64_t srcOffset, uint64_t dstOffset)
 {
-    if (m_resource.Get() == nullptr) { return nullptr; }
+    auto dst = Map();
+    auto copySize = (size > m_size) ? m_size : size;
+    memcpy(dst, src, copySize);
+    UnMap();
+}
+
+void ConstantBuffer::Swap()
+{
+    m_index = (m_index + 1) & 0x1;
+}
+
+void* ConstantBuffer::Map(uint32_t index)
+{
+    if (m_resource[index].Get() == nullptr) { return nullptr; }
 
     void* data = nullptr;
-    HRESULT hr = m_resource->Map(0, nullptr, &data);
+    HRESULT hr = m_resource[index]->Map(0, nullptr, &data);
     if (FAILED(hr))
     {
         ELOGA("Error : ID3D12Resource::Map() Failed. errcode = 0x%x", hr);
@@ -128,32 +147,45 @@ void* ConstantBuffer::Map()
     return data;
 }
 
+void* ConstantBuffer::Map()
+{
+    return Map(m_index);
+}
+
+void ConstantBuffer::UnMap(uint32_t index)
+{
+    if (m_resource[index].Get() == nullptr) { return; }
+
+    m_resource[index]->Unmap(0, nullptr);
+}
+
 void ConstantBuffer::UnMap()
 {
-    if (m_resource.Get() == nullptr) { return; }
-
-    m_resource->Unmap(0, nullptr);
+    UnMap(m_index);
 }
 
 void ConstantBuffer::SetDebugName(LPCWSTR tag)
 {
-    if (m_resource.Get())
+    for (int i = 0; i < 2; i++)
     {
-        m_resource->SetName(tag);
+        if (m_resource[i].Get())
+        {
+            m_resource[i]->SetName(tag);
+        }
     }
 }
 
 ID3D12Resource* ConstantBuffer::GetResource() const
 {
-    return m_resource.Get();
+    return m_resource[m_index].Get();
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS ConstantBuffer::GetGpuAddress() const
 {
     D3D12_GPU_VIRTUAL_ADDRESS result = {};
-    if (m_resource.Get() != nullptr)
+    if (m_resource[m_index].Get() != nullptr)
     {
-        result = m_resource->GetGPUVirtualAddress();
+        result = m_resource[m_index]->GetGPUVirtualAddress();
     }
     return result;
 }

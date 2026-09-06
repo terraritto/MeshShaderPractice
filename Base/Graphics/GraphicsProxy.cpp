@@ -4,13 +4,28 @@
 #include "MeshShaderPractice/Base/Graphics/GraphicsDevice.h"
 #include "MeshShaderPractice/Base/Util/Logger.h"
 
+bool GraphicsProxy::m_isResolvedQuery = false;
+ReadBackBuffer GraphicsProxy::m_queryBuffer;
+
 bool GraphicsProxy::Initialize(const DeviceDesc& desc)
 {
-    return GraphicsDevice::Instance().Initialize(desc);
+    if (!GraphicsDevice::Instance().Initialize(desc))
+    {
+        return false;
+    }
+
+    // pipeline stattistics
+    if (!m_queryBuffer.Initialize(256)) // enugh minimum size.
+    {
+        return false;
+    }
+
+    return true;
 }
 
 void GraphicsProxy::Terminate()
 {
+    m_queryBuffer.Terminate();
     GraphicsDevice::Instance().Terminate();
 }
 
@@ -69,6 +84,11 @@ IDXGIFactory7* GraphicsProxy::GetDXGIFactory()
     return GraphicsDevice::Instance().GetFactory();
 }
 
+ID3D12Resource* GraphicsProxy::GetQueryResource()
+{
+    return m_queryBuffer.GetResource();
+}
+
 D3D12MA::Allocator* GraphicsProxy::GetD3D12MA()
 {
     return GraphicsDevice::Instance().GetD3D12MA();
@@ -99,6 +119,31 @@ void GraphicsProxy::GetDisplayInfo(DXGI_FORMAT format, std::vector<DisplayInfo>&
     return GraphicsDevice::Instance().GetDisplayInfo(format, result);
 }
 
+void GraphicsProxy::BeginQuery(ID3D12GraphicsCommandList* command)
+{
+    auto query = GraphicsDevice::Instance().GetQuery();
+    bool isMeshlet = IsUseMeshlet();
+    auto type = isMeshlet ? D3D12_QUERY_TYPE_PIPELINE_STATISTICS1 : D3D12_QUERY_TYPE_PIPELINE_STATISTICS;
+    command->BeginQuery(query, type, 0);
+}
+
+void GraphicsProxy::EndQuery(ID3D12GraphicsCommandList* command)
+{
+    auto query = GraphicsDevice::Instance().GetQuery();
+    bool isMeshlet = IsUseMeshlet();
+    auto type = isMeshlet ? D3D12_QUERY_TYPE_PIPELINE_STATISTICS1 : D3D12_QUERY_TYPE_PIPELINE_STATISTICS;
+    command->EndQuery(query, type, 0);
+}
+
+void GraphicsProxy::ResolveQuery(ID3D12GraphicsCommandList* command)
+{
+    auto query = GraphicsDevice::Instance().GetQuery();
+    bool isMeshlet = IsUseMeshlet();
+    auto type = isMeshlet ? D3D12_QUERY_TYPE_PIPELINE_STATISTICS1 : D3D12_QUERY_TYPE_PIPELINE_STATISTICS;
+    command->ResolveQueryData(query, type, 0, 1, m_queryBuffer.GetResource(), 0);
+    m_isResolvedQuery = true;
+}
+
 bool GraphicsProxy::IsSupportGpuUploadHeap()
 {
     return GraphicsDevice::Instance().IsSupportGpuUploadHeap();
@@ -107,6 +152,11 @@ bool GraphicsProxy::IsSupportGpuUploadHeap()
 bool GraphicsProxy::IsUseMeshlet()
 {
     return GraphicsDevice::Instance().IsUseMeshlet();
+}
+
+bool GraphicsProxy::HasQuery()
+{
+    return m_isResolvedQuery;
 }
 
 void GraphicsProxy::UpdateSubResources(ID3D12GraphicsCommandList* commandList, ID3D12Resource* dstResource, uint32_t subResourceCount, uint32_t subResourceOffset, const D3D12_SUBRESOURCE_DATA* subResources)

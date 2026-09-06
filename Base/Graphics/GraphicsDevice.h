@@ -42,6 +42,7 @@ struct DeviceDesc
 	bool EnableBreakOnWarning = false;
 	bool EnableBreakOnError = true;
 	bool IsUseMeshlet = true;
+	bool IsSupportGpuUploadHeap = false;
 };
 
 class GraphicsDevice
@@ -55,6 +56,7 @@ protected:
 	// Getter
 	ID3D12Device8* GetDevice() const;
 	IDXGIFactory7* GetFactory() const;
+	ID3D12QueryHeap* GetQuery() const;
 	D3D12MA::Allocator* GetD3D12MA() const;
 	std::weak_ptr<CommandQueue> GetGraphicsQueue() const;
 	std::weak_ptr<CommandQueue> GetComputeQueue() const;
@@ -116,6 +118,7 @@ private:
 	ComPtr<IDXGIOutput6> m_output;
 	ComPtr<ID3D12Device14> m_device;
 	ComPtr<ID3D12InfoQueue> m_infoQueue;
+	ComPtr<ID3D12QueryHeap> m_queryHeap;
 	ComPtr<D3D12MA::Allocator> m_allocator;
 	DescriptorHeap m_rtvHeap;
 	DescriptorHeap m_dsvHeap;

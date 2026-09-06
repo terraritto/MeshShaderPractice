@@ -39,16 +39,21 @@ public:
 	// setter
 	void SetPosition(const XMVECTOR& value);
 	void SetTarget(const XMVECTOR& value);
+	void SetFov(const float fov);
+	void SetAspect(const float aspect);
 
 	// Getter
 	const float& GetAngleV() const;
 	const float& GetAngleH() const;
 	const float& GetDistance() const;
+	const float& GetFov() const;
+	const float& GetAspect() const;
 
 	const XMVECTOR& GetPosition() const;
 	const XMVECTOR& GetTarget() const;
 	const XMVECTOR& GetUpward() const;
 	const XMMATRIX& GetView() const;
+	const XMMATRIX& GetProjection() const;
 
 private:
 	void Rotate(float angleH, float angleV);
@@ -59,6 +64,7 @@ private:
 	void ComputePosition();
 	void ComputeTarget();
 	void ComputeAngle();
+	void ComputeProjection();
 
 	float Cosine(float rad);
 	float Sine(float rad);
@@ -89,6 +95,9 @@ private:
 private:
 	Param m_current;
 	Param m_preserve;
+	float m_fov;
+	float m_aspect;
 	XMMATRIX m_view = MatIdentity;
+	XMMATRIX m_proj = MatIdentity;
 	uint32_t m_dirtyFlag = static_cast<uint32_t>(DirtyFlag::None);
 };

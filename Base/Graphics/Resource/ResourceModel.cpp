@@ -111,7 +111,7 @@ void ResourceModel::ParseMesh(const aiScene* scene)
 
         if (GraphicsProxy::IsUseMeshlet())
         {
-            ConstructMeshletFromDirectX(resourceMesh.get());
+            ConstructMeshletBoundingSphere(resourceMesh.get());
         }
 
         m_meshes[k] = resourceMesh;
@@ -127,11 +127,7 @@ void ResourceModel::ConstructMeshletFromOptimizer(ResourceMesh* mesh)
     constexpr float CONE_WEIGHT = 0.0f;
 
     // Calculate max num of meshlet
-    const size_t maxMeshlets = 
-        meshopt_buildMeshletsBound(
-            mesh->GetIndicesNum(), 
-            MAX_VERTICES, 
-            MAX_TRIANGLES);
+    const size_t maxMeshlets = meshopt_buildMeshletsBound(mesh->GetIndicesNum(), MAX_VERTICES, MAX_TRIANGLES);
     
     // alloc max size
     std::vector<meshopt_Meshlet> meshlets; meshlets.resize(maxMeshlets);
@@ -161,6 +157,44 @@ void ResourceModel::ConstructMeshletFromOptimizer(ResourceMesh* mesh)
     mesh->m_uniqueVertexIndices.resize(last.vertex_offset + last.vertex_count);
     meshletTriangles.resize(last.triangle_offset + ((last.triangle_count * 3 + 3) & ~3));
     meshlets.resize(meshletCount);
+
+    // Create Bounding Sphere
+    std::vector<XMFLOAT4> meshletBounds;
+    std::vector<uint32_t> meshletCones;
+    for (meshopt_Meshlet& meshlet : meshlets)
+    {
+        auto bounds = meshopt_computeMeshletBounds
+        (
+            &mesh->m_uniqueVertexIndices[meshlet.vertex_offset],        // start vertex index
+            &meshletTriangles[meshlet.triangle_offset],                 // start triangle
+            meshlet.triangle_count,                                     // num of triangle
+            reinterpret_cast<const float*>(mesh->m_positions.data()),   // pointer to vertex positions
+            mesh->GetVerticesNum(),                                     // num of vertex positions
+            sizeof(XMFLOAT3)                                            // vertex stride
+            );
+
+        // store sphere. Structure: XYZ=Center, W=Radius.
+        meshletBounds.push_back(XMFLOAT4(bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius));
+
+        // Range Convert: [-1,1] -> [-0.5, 0.5] -> [0.0, 1.0]
+        // Cone Axis is reverse direction, so return true direction.
+        XMFLOAT4 normalCone =
+        {
+            std::clamp(bounds.cone_axis[0] * 0.5f + 0.5f, 0.0f, 1.0f),
+            std::clamp(bounds.cone_axis[1] * 0.5f + 0.5f, 0.0f, 1.0f),
+            std::clamp(bounds.cone_axis[2] * 0.5f + 0.5f, 0.0f, 1.0f),
+            std::clamp(bounds.cone_cutoff  * 0.5f + 0.5f, 0.0f, 1.0f) // sin(a)
+        };
+
+        // pack
+        uint32_t packNormalCone = 0u;
+        packNormalCone |= ((static_cast<uint8_t>(normalCone.x * 255.0f) & 0xFF) << 0);
+        packNormalCone |= ((static_cast<uint8_t>(normalCone.y * 255.0f) & 0xFF) << 8);
+        packNormalCone |= ((static_cast<uint8_t>(normalCone.z * 255.0f) & 0xFF) << 16);
+        packNormalCone |= ((static_cast<uint8_t>(normalCone.w * 255.0f) & 0xFF) << 24);
+
+        meshletCones.push_back(packNormalCone);
+    }
 
     // repack triangles from uint8 to uint32
     for (meshopt_Meshlet& meshlet : meshlets)
@@ -195,14 +229,17 @@ void ResourceModel::ConstructMeshletFromOptimizer(ResourceMesh* mesh)
     }
 
     // set meshlet
-    for (const meshopt_Meshlet& meshlet : meshlets)
+    for (int count = 0; const meshopt_Meshlet& meshlet : meshlets)
     {
         ResourceMeshlet meshletResource;
         meshletResource.m_vertexOffset = meshlet.vertex_offset;
         meshletResource.m_vertexCount = meshlet.vertex_count;
         meshletResource.m_primitiveOffset = meshlet.triangle_offset;
         meshletResource.m_primitiveCount = meshlet.triangle_count;
+        meshletResource.m_boundingSphere = meshletBounds[count];
+        meshletResource.m_normalCone = meshletCones[count];
         mesh->m_meshlets.push_back(meshletResource);
+        count++;
     }
 }
 
@@ -560,7 +597,6 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
         XMFLOAT3 m_position;
         uint32_t m_index;
         std::vector<Triangle*> m_neighbors;
-        bool m_isVisited = false;
     };
 
     auto LengthVec3 = [](XMFLOAT3& lhs, XMFLOAT3 rhs)
@@ -723,9 +759,9 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
             float bestNewRadius = newRadius - 1.0f;
             int bestVertexScore = 0;
 
-            for (Vertex* vertex : tempVertices)
+            for (Vertex* v : tempVertices)
             {
-                for (Triangle* triangle : vertex->m_neighbors)
+                for (Triangle* triangle : v->m_neighbors)
                 {
                     if (triangle->m_isVisited) { continue; }
 
@@ -748,9 +784,9 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
                     // Search Triangle Neighbors
                     int used = 0;
                     int neighbors = 0;
-                    for (Vertex* vertex : triangle->m_vertices)
+                    for (Vertex* v : triangle->m_vertices)
                     {
-                        for (Triangle* neighborTriangle : vertex->m_neighbors)
+                        for (Triangle* neighborTriangle : v->m_neighbors)
                         {
                             // not add self.
                             if (neighborTriangle == triangle) { continue; }
@@ -769,10 +805,6 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
                         // Score == 4 means that 3 vertex is added to meshlet,
                         // but triangle isn't added meshlet. it's corner case.
                         newRadius = radius;
-                    }
-                    else if (vertexScore == 1)
-                    {
-                        continue;
                     }
                     else
                     {
@@ -832,12 +864,13 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
             if (isVert2) { newVertex = vert2; mustAddVertexCount++; }
             if (isVert3) { newVertex = vert3; mustAddVertexCount++; }
 
+            radius = bestNewRadius;
+
             // if all vertex added but triangle isn't add pattern.
             // this pattern value is 0, it skip radius update.
             if (mustAddVertexCount != 0)
             {
                 // Update
-                radius = bestNewRadius;
                 XMFLOAT3 tempCenter;
                 XMFLOAT3 pos = newVertex->m_position;
                 tempCenter.x = pos.x + (radius / (FLT_EPSILON + LengthVec3(center, pos))) * (center.x - pos.x);
@@ -862,9 +895,9 @@ void ResourceModel::ConstructMeshletBoundingSphere(ResourceMesh* mesh)
             // register triangle and vertices.
             bestTriangle->m_isVisited = true;
             tempTriangles.push_back(bestTriangle);
-            if (isVert1) { tempVertices.push_back(vert1); vert1->m_isVisited = true; }
-            if (isVert2) { tempVertices.push_back(vert2); vert2->m_isVisited = true; }
-            if (isVert3) { tempVertices.push_back(vert3); vert3->m_isVisited = true; }
+            if (isVert1) { tempVertices.push_back(vert1); }
+            if (isVert2) { tempVertices.push_back(vert2); }
+            if (isVert3) { tempVertices.push_back(vert3); }
         }
 
         // when loop finished and triangle remained, make meshlet.

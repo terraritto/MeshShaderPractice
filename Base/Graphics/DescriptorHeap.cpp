@@ -111,6 +111,11 @@ uint32_t DescriptorHeap::GetFreeCount() const
 	return m_allocator.GetFreeSize();
 }
 
+ID3D12DescriptorHeap* DescriptorHeap::GetHeap() const
+{
+	return m_heap;
+}
+
 void DescriptorHeap::FrameSync()
 {
 	ScopedLock<SpinLock> lock{ m_spinLock };

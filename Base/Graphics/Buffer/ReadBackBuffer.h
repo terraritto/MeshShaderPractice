@@ -5,22 +5,17 @@
 #include "MeshShaderPractice/Base/Graphics/Holder/AllocationHolder.h"
 #include "MeshShaderPractice/Base/Graphics/Holder/DescriptorHolder.h"
 
-class ConstantBuffer
+class ReadBackBuffer
 {
 public:
-	ConstantBuffer();
-	~ConstantBuffer();
+	ReadBackBuffer();
+	~ReadBackBuffer();
 
 	bool Initialize(uint64_t size);
 	void Terminate();
 
-	void Update(const void* src, uint64_t size, uint64_t srcOffset = 0, uint64_t dstOffset = 0);
-	void Swap();
-
 	// memory mapping
-	void* Map(uint32_t index);
 	void* Map();
-	void UnMap(uint32_t index);
 	void UnMap();
 
 	template<class T>
@@ -38,8 +33,7 @@ public:
 	uint64_t GetSize() const;
 
 private:
-	ComPtr<ID3D12Resource> m_resource[2];
-	AllocationHolder m_holder[2];
+	ComPtr<ID3D12Resource> m_resource;
+	AllocationHolder m_holder;
 	uint64_t m_size = 0;
-	uint32_t m_index = 0;
 };

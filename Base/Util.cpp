@@ -1,6 +1,25 @@
 #include "Util.h"
 #include <filesystem>
 
+XMVECTOR&& NormalizePlane(const XMVECTOR& value)
+{
+    auto* data = value.m128_f32;
+    float magnitude = std::sqrt(data[0] * data[0] + data[1] * data[1] + data[2] * data[2]);
+    return DirectX::XMVectorDivide(value, DirectX::g_XMOne * magnitude);
+}
+
+void CalculateFrustumPlanes(const XMMATRIX& view, const XMMATRIX& proj, XMVECTOR* planes)
+{
+    auto vp = DirectX::XMMatrixMultiplyTranspose(view, proj);
+
+    planes[PLANE_LEFT] = NormalizePlane(DirectX::XMVectorAdd(vp.r[3], vp.r[0]));
+    planes[PLANE_RIGHT] = NormalizePlane(DirectX::XMVectorSubtract(vp.r[3], vp.r[0]));
+    planes[PLANE_BOTTOM] = NormalizePlane(DirectX::XMVectorAdd(vp.r[3], vp.r[1]));
+    planes[PLANE_TOP] = NormalizePlane(DirectX::XMVectorSubtract(vp.r[3], vp.r[1]));
+    planes[PLANE_NEAR] = NormalizePlane(vp.r[2]);
+    planes[PLANE_FAR] = NormalizePlane(DirectX::XMVectorSubtract(vp.r[3], vp.r[2]));
+}
+
 DXGI_FORMAT GetNoSRGBFormat(const DXGI_FORMAT value)
 {
     DXGI_FORMAT format = value;

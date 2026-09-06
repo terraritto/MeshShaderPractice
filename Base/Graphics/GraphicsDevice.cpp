@@ -425,12 +425,12 @@ bool GraphicsDevice::Initialize(const DeviceDesc& deviceDesc)
 	}
 
 	// Check Gpu upload heap support
-	m_isSupportGpuUploadHeap = false;
 	D3D12_FEATURE_DATA_D3D12_OPTIONS16 options = {};
 	hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options, sizeof(options));
+	m_isSupportGpuUploadHeap = false;
 	if (SUCCEEDED(hr))
 	{
-		m_isSupportGpuUploadHeap = options.GPUUploadHeapSupported;
+		m_isSupportGpuUploadHeap = deviceDesc.IsSupportGpuUploadHeap && options.GPUUploadHeapSupported;
 	}
 
 	// Check Meshlet support
@@ -459,6 +459,18 @@ bool GraphicsDevice::Initialize(const DeviceDesc& deviceDesc)
 		}
 	}
 	m_isUseMeshlet = deviceDesc.IsUseMeshlet;
+
+	// Pipeline Statistics
+	{
+		D3D12_QUERY_HEAP_TYPE queryType = m_isUseMeshlet ? D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS1 : D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+		D3D12_QUERY_HEAP_DESC queryDesc = { queryType, 1 };
+		hr = m_device->CreateQueryHeap(&queryDesc, IID_PPV_ARGS(&m_queryHeap));
+		if (FAILED(hr))
+		{
+			ELOGA("Error: ID3D12Device::CreateQueryHeap() Failed.");
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -494,6 +506,7 @@ void GraphicsDevice::Terminate()
 
 	m_allocator.Reset();
 
+	m_queryHeap.Reset();
 	m_output.Reset();
 	m_device.Reset();
 	m_infoQueue.Reset();
@@ -510,6 +523,11 @@ ID3D12Device8* GraphicsDevice::GetDevice() const
 IDXGIFactory7* GraphicsDevice::GetFactory() const
 {
 	return m_factory.Get();
+}
+
+ID3D12QueryHeap* GraphicsDevice::GetQuery() const
+{
+	return m_queryHeap.Get();
 }
 
 D3D12MA::Allocator* GraphicsDevice::GetD3D12MA() const

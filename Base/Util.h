@@ -37,6 +37,26 @@ static XMVECTOR VecUnitY = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
 static XMVECTOR VecUnitZ = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 1.0f);
 static XMMATRIX MatIdentity = DirectX::XMMatrixIdentity();
 
+// for math
+enum PLANE_TYPE
+{
+	PLANE_LEFT = 0,
+	PLANE_RIGHT = 1,
+	PLANE_BOTTOM = 2,
+	PLANE_TOP = 3,
+	PLANE_NEAR = 4,
+	PLANE_FAR = 5,
+};
+XMVECTOR&& NormalizePlane(const XMVECTOR& value);
+void CalculateFrustumPlanes(const XMMATRIX& view, const XMMATRIX& proj, XMVECTOR* planes);
+
+// for shader
+struct ShaderInfo
+{
+	std::wstring m_path;
+	ComPtr<IDxcBlob> m_blob;
+};
+
 // SRGB -> Non-SRGB
 DXGI_FORMAT GetNoSRGBFormat(const DXGI_FORMAT value);
 

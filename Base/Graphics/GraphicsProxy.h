@@ -1,7 +1,8 @@
 #pragma once
 #include <d3d12.h>
+#include "MeshShaderPractice/Base/Graphics/Buffer/ReadBackBuffer.h"
 #include "MeshShaderPractice/Base/Graphics/GraphicsDevice.h"
-#include "MeshShaderPractice/Base/Graphics/PipelineState.h"
+#include "MeshShaderPractice/Base/Graphics/PS/MeshShaderPipelineState.h"
 
 class GraphicsProxy
 {
@@ -28,12 +29,19 @@ public:
 	static DescriptorHeap* GetSamplerDescriptorHeap();
 	static ID3D12Device8* GetD3D12Device();
 	static IDXGIFactory7* GetDXGIFactory();
+	static ID3D12Resource* GetQueryResource();
 	static D3D12MA::Allocator* GetD3D12MA();
 	static void GetDisplayInfo(DXGI_FORMAT format, std::vector<DisplayInfo>& result);
+
+	// PipelineStatistics
+	static void BeginQuery(ID3D12GraphicsCommandList* command);
+	static void EndQuery(ID3D12GraphicsCommandList* command);
+	static void ResolveQuery(ID3D12GraphicsCommandList* command);
 
 	// Condition
 	static bool IsSupportGpuUploadHeap();
 	static bool IsUseMeshlet();
+	static bool HasQuery();
 
 	// Resource
 	static void UpdateSubResources(ID3D12GraphicsCommandList* commandList, ID3D12Resource* dstResource, uint32_t subResourceCount, uint32_t subResourceOffset, const D3D12_SUBRESOURCE_DATA* subResources);
@@ -63,4 +71,8 @@ private:
 	// Resource
 	static UINT64 GetRequiredIntermediateSize(ID3D12Device* device, D3D12_RESOURCE_DESC* desc, UINT firstSubResource, UINT subResourceCount) noexcept;
 	static void CopySubresource(const D3D12_MEMCPY_DEST* dst, const D3D12_SUBRESOURCE_DATA* src, SIZE_T rowSizeInBytes, UINT rowCount, UINT sliceCount) noexcept;
+
+private:
+	static bool m_isResolvedQuery;
+	static ReadBackBuffer m_queryBuffer;
 };

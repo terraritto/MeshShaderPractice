@@ -1,5 +1,6 @@
 #include "AppBase.h"
 #include <d3dcommon.h>
+#include "MeshShaderPractice/Base/App/ImguiManager.h"
 #include "MeshShaderPractice/Base/Graphics/DescriptorHeap.h"
 #include "MeshShaderPractice/Base/Util/Logger.h"
 
@@ -48,7 +49,7 @@ AppBase::AppBase(LPCWSTR title, UINT width, UINT height, HICON icon, HMENU menu,
 
 	// DepthStencil Clear
 	m_clearDepth = 1.0f;
-	m_clearStencil = 0.0f;
+	m_clearStencil = 0;
 
 	// default device desc
 	m_deviceDesc.EnableDebug = true;
@@ -56,6 +57,7 @@ AppBase::AppBase(LPCWSTR title, UINT width, UINT height, HICON icon, HMENU menu,
 	m_deviceDesc.EnableBreakOnError = true;
 	m_deviceDesc.EnableBreakOnWarning = true;
 	m_deviceDesc.IsUseMeshlet = true;
+	m_deviceDesc.IsSupportGpuUploadHeap = false;
 	m_deviceDesc.MaxColorTargetCount = 128;
 	m_deviceDesc.MaxDepthTargetCount = 128;
 	m_deviceDesc.MaxSamplerCount = 128;
@@ -419,6 +421,13 @@ bool AppBase::InitializeD3D()
 
 	m_copyCommandList.SetName(L"DefaultCopyCommandList");
 
+	// imgui
+	ImguiDesc imguiDesc;
+	imguiDesc.dsvFormat = m_depthStencilFormat;
+	imguiDesc.rtvFormat = m_swapChainFormat;
+	imguiDesc.numFrames = m_swapChainCount;
+	ImguiManager::Instance().Initialize(m_window, imguiDesc);
+
 	return true;
 }
 
@@ -445,6 +454,9 @@ void AppBase::TerminateWindow()
 
 void AppBase::TerminateD3D()
 {
+	// imgui
+	ImguiManager::Instance().Terminate();
+
 	if (m_isCreateWindow)
 	{
 		for (size_t i = 0; i < m_colorTarget.size(); ++i)
@@ -488,6 +500,16 @@ void AppBase::MainLoop()
 LRESULT CALLBACK AppBase::WindowProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp)
 {
 	AppBase* instance = reinterpret_cast<AppBase*>(GetWindowLongPtr(window, GWLP_USERDATA));
+
+	if (ImguiManager::WindowProc(window, message, wp, lp))
+	{
+		return true;
+	}
+
+	if (ImguiManager::IsInput())
+	{
+		return true;
+	}
 
 	switch (message)
 	{

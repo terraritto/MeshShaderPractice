@@ -3,6 +3,8 @@
 #include <cmath>
 
 Camera::Camera()
+    : m_aspect(16.0f/9.0)
+    , m_fov(90.0f)
 {
     m_current.m_position = DirectX::XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
     m_current.m_target = VecZero;
@@ -106,6 +108,18 @@ void Camera::SetTarget(const XMVECTOR& value)
     Update();
 }
 
+void Camera::SetFov(const float fov)
+{
+    m_fov = fov;
+    ComputeProjection();
+}
+
+void Camera::SetAspect(const float aspect)
+{
+    m_aspect = aspect;
+    ComputeProjection();
+}
+
 const float& Camera::GetAngleV() const
 {
     return m_current.m_angle.x;
@@ -119,6 +133,16 @@ const float& Camera::GetAngleH() const
 const float& Camera::GetDistance() const
 {
     return m_current.m_distance;
+}
+
+const float& Camera::GetFov() const
+{
+    return m_fov;
+}
+
+const float& Camera::GetAspect() const
+{
+    return m_aspect;
 }
 
 const XMVECTOR& Camera::GetPosition() const
@@ -139,6 +163,11 @@ const XMVECTOR& Camera::GetUpward() const
 const XMMATRIX& Camera::GetView() const
 {
     return m_view;
+}
+
+const XMMATRIX& Camera::GetProjection() const
+{
+    return m_proj;
 }
 
 void Camera::Rotate(float angleH, float angleV)
@@ -218,6 +247,12 @@ void Camera::ComputeAngle()
     ToVector(m_current.m_angle.x, m_current.m_angle.y, nullptr, &m_current.m_upward);
 }
 
+void Camera::ComputeProjection()
+{
+    const auto fovY = DirectX::XMConvertToRadians(m_fov);
+    m_proj = DirectX::XMMatrixPerspectiveFovRH(fovY, m_aspect, 0.1f, 1000.0f);
+}
+
 float Camera::Cosine(float rad)
 {
     if (abs(rad) < FLT_EPSILON) { return 1.0f; }
@@ -274,7 +309,7 @@ void Camera::ToAngle(const XMVECTOR& v, float* angleH, float* angleV, float* dis
             dest = DirectX::XMVector3Normalize(src);
         }
 
-        *angleH = CalculateAngle(dest.m128_f32[1], dest.m128_f32[0]);
+        *angleV = CalculateAngle(dest.m128_f32[1], dest.m128_f32[0]);
     }
 }
 

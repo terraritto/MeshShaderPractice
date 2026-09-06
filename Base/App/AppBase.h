@@ -81,7 +81,7 @@ protected:
 	DXGI_FORMAT					m_depthStencilFormat;
 	float                       m_clearColor[4];
 	float						m_clearDepth;
-	float						m_clearStencil;
+	uint8_t						m_clearStencil;
 	uint32_t					m_multiSampleCount;
 	uint32_t					m_multiSampleQuality;
 	bool						m_isAllowTearing;
@@ -103,7 +103,7 @@ protected:
 
 private:
 	// D3D
-	ComPtr<IDXGISwapChain4> m_swapChain;
+	ComPtr<IDXGISwapChain4>		m_swapChain;
 
 	// Utility
 	Timer						m_timer;

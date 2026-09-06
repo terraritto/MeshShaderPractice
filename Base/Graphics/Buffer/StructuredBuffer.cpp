@@ -100,7 +100,7 @@ bool StructuredBuffer::Initialize(uint64_t count, uint32_t stride, D3D12_RESOURC
 
 bool StructuredBuffer::Initialize(ID3D12GraphicsCommandList* command, uint64_t count, uint32_t stride, const void* initData)
 {
-    if (GraphicsProxy::IsSupportGpuUploadHeap() == false)
+    if (GraphicsProxy::IsSupportGpuUploadHeap())
     {
         uint64_t size = count * stride;
         uint64_t rest = size % 4;
@@ -181,13 +181,12 @@ bool StructuredBuffer::Initialize(ID3D12GraphicsCommandList* command, uint64_t c
         }
 
         m_state = D3D12_RESOURCE_STATE_COMMON;
+        return true;
     }
-    else
+
+    if (!Initialize(count, stride, D3D12_RESOURCE_STATE_COMMON))
     {
-        if (!Initialize(count, stride, D3D12_RESOURCE_STATE_COMMON))
-        {
-            return false;
-        }
+        return false;
     }
 
     // update

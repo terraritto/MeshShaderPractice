@@ -9,3 +9,8 @@ size_t ResourceMesh::GetIndicesNum() const
 {
     return m_indices.size();
 }
+
+const std::vector<ResourceMeshlet>& ResourceMesh::GetResourceMeshlets()
+{
+    return m_meshlets;
+}

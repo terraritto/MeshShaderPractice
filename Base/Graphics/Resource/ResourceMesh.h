@@ -9,6 +9,8 @@ public:
 	size_t GetVerticesNum() const;
 	size_t GetIndicesNum() const;
 
+	const std::vector<ResourceMeshlet>& GetResourceMeshlets();
+
 protected:
 	std::string m_name;
 	std::vector<XMFLOAT3> m_positions;

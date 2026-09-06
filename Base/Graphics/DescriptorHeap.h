@@ -24,6 +24,8 @@ public:
 	uint32_t GetUsedCount() const;
 	uint32_t GetFreeCount() const;
 
+	ID3D12DescriptorHeap* GetHeap() const;
+
 	// Synchronize GPU
 	void FrameSync();
 
