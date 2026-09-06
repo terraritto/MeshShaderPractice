@@ -1,10 +1,20 @@
-// Camera
-struct CameraProperties
+#define AS_GROUP_SIZE 32  // thread group size
+
+struct SceneProperties
 {
     float4x4 MVP;
+    uint InstanceCount;
+    uint MeshletCount;
 };
 
-ConstantBuffer<CameraProperties> Camera : register(b0);
+ConstantBuffer<SceneProperties> Scene : register(b0);
+
+// Payload
+struct Payload
+{
+    uint InstanceIndices[AS_GROUP_SIZE];
+	uint MeshletIndices[AS_GROUP_SIZE];
+};
 
 // Meshlet
 struct VertexInput
@@ -22,10 +32,16 @@ struct Meshlet
     float4 BoundingSphere;
 };
 
+struct Instance
+{
+    float4x4 Mat;
+};
+
 StructuredBuffer<VertexInput>   Vertices            : register(t0);
 StructuredBuffer<Meshlet>       Meshlets            : register(t1);
 StructuredBuffer<uint>          VertexIndices       : register(t2);
 StructuredBuffer<uint>          TriangleIndices     : register(t3);
+StructuredBuffer<Instance>      Instances           : register(t4);
 
 struct VertexOutput
 {
@@ -39,12 +55,17 @@ void main
 (
     uint groupThreadIndex : SV_GroupThreadID,
     uint groupIndex : SV_GroupID,
+    in payload Payload payload,
     out vertices VertexOutput vertices[64],
     out indices uint3 triangles[128]
 )
 {
+    // unpack index
+    uint instanceIndex = payload.InstanceIndices[groupIndex];
+    uint meshletIndex = payload.MeshletIndices[groupIndex];
+
     // get meshlet from index
-    Meshlet meshlet = Meshlets[groupIndex];
+    Meshlet meshlet = Meshlets[meshletIndex];
 
     // set output count
     SetMeshOutputCounts(meshlet.VertexCount, meshlet.TriangleCount);
@@ -65,8 +86,10 @@ void main
         uint vertexIndex = meshlet.VertexOffset + groupThreadIndex;
         vertexIndex = VertexIndices[vertexIndex];
 
+        float4x4 mvp = mul(Scene.MVP, Instances[instanceIndex].Mat);
+
         VertexOutput vout;
-        vout.Position   = mul(Camera.MVP, float4(Vertices[vertexIndex].Position, 1.0f));   
+        vout.Position   = mul(mvp, float4(Vertices[vertexIndex].Position, 1.0f));   
         vout.Color      = float3(float(groupIndex & 1), float(groupIndex & 3) / 4, float(groupIndex & 7) / 8);        
         vertices[groupThreadIndex] = vout;
     }

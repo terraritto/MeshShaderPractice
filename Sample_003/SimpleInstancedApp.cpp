@@ -1,13 +1,13 @@
-#include "SimpleMeshletApp.h"
+#include "SimpleInstancedApp.h"
+#include "MeshShaderPractice/Base/App/ImguiManager.h"
 #include "MeshShaderPractice/Base/Graphics/GraphicsProxy.h"
 #include "MeshShaderPractice/Base/Util/Logger.h"
 
-struct alignas(256) CameraCBData
-{
-    XMMATRIX m_mvpMatrix;
-};
+#include "MeshShaderPractice/External/Imgui/imgui.h"
+#include "MeshShaderPractice/External/Imgui/imgui_impl_win32.h"
+#include "MeshShaderPractice/External/Imgui/imgui_impl_dx12.h"
 
-bool SimpleMeshletApp::OnInitialize()
+bool SimpleInstancedApp::OnInitialize()
 {
     HRESULT hr = S_OK;
 
@@ -19,11 +19,12 @@ bool SimpleMeshletApp::OnInitialize()
     {
         // Root Param
         std::vector<D3D12_ROOT_PARAMETER> params;
-        params.push_back(PARAM_CBV{ D3D12_SHADER_VISIBILITY_MESH, 0, 0 });
+        params.push_back(PARAM_CONSTANT{ D3D12_SHADER_VISIBILITY_ALL, 18, 0, 0}); // 18 = (sizeof(XMMATRIX) + sizeof(UINT) * 2) / 4
         params.push_back(PARAM_SRV{ D3D12_SHADER_VISIBILITY_MESH, 0, 0 });
         params.push_back(PARAM_SRV{ D3D12_SHADER_VISIBILITY_MESH, 1, 0 });
         params.push_back(PARAM_SRV{ D3D12_SHADER_VISIBILITY_MESH, 2, 0 });
         params.push_back(PARAM_SRV{ D3D12_SHADER_VISIBILITY_MESH, 3, 0 });
+        params.push_back(PARAM_SRV{ D3D12_SHADER_VISIBILITY_MESH, 4, 0 });
 
         // Root signature
         D3D12_ROOT_SIGNATURE_DESC desc;
@@ -33,7 +34,6 @@ bool SimpleMeshletApp::OnInitialize()
         desc.pStaticSamplers = nullptr;
         desc.Flags =
             D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS
-            | D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS
             | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
             | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
             | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
@@ -50,8 +50,8 @@ bool SimpleMeshletApp::OnInitialize()
         // RasterizerState
         D3D12_RASTERIZER_DESC rsDesc;
         rsDesc.FillMode = D3D12_FILL_MODE_SOLID;
-        rsDesc.CullMode = D3D12_CULL_MODE_NONE;
-        rsDesc.FrontCounterClockwise = FALSE;
+        rsDesc.CullMode = D3D12_CULL_MODE_BACK;
+        rsDesc.FrontCounterClockwise = TRUE;
         rsDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
         rsDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
         rsDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
@@ -81,8 +81,9 @@ bool SimpleMeshletApp::OnInitialize()
         }
 
         // Shader
-        m_pso.SetReloadPathPS(L"Sample_002/Resource/Shader/SimplePS.hlsl");
-        m_pso.SetReloadPathMS(L"Sample_002/Resource/Shader/SimpleMS.hlsl");
+        m_pso.SetReloadPathAS(L"Sample_003/Resource/Shader/SimpleAS.hlsl");
+        m_pso.SetReloadPathPS(L"Sample_003/Resource/Shader/SimplePS.hlsl");
+        m_pso.SetReloadPathMS(L"Sample_003/Resource/Shader/SimpleMS.hlsl");
 
         // Depth Stencil Operate
         D3D12_DEPTH_STENCILOP_DESC stencilOpDesc = {};
@@ -131,30 +132,54 @@ bool SimpleMeshletApp::OnInitialize()
         }
     }
 
-    m_camera.SetPosition(DirectX::XMVectorSet(0.0f, 0.1f, 0.3f, 1.0f));
-    m_cameraCB.resize(m_swapChainCount, ConstantBuffer());
-    for (auto& buffer : m_cameraCB)
-    {
-        if (!buffer.Initialize(sizeof(CameraCBData)))
-        {
-            ELOGA("Error : ConstantBuffer::Init() Failed.");
-            return false;
-        }
-    }
-
     m_graphicsCommandList.Reset();
     auto command = m_graphicsCommandList.GetD3D12CommandList();
 
     // setup model
-    std::string path = "Sample_002/Resource/Model/bunny.obj";
+    //std::string path = "Sample_003/Resource/Model/icon_no_aitsu_2026.obj";
+    std::string path = "Sample_003/Resource/Model/bunny.obj";
     if (!m_model.Initialize(command, path))
     {
         ELOGA("Error : Model::Initialize() Failed.");
         return false;
     }
 
+    // setup instances
+    {
+        m_instances.resize(InstanceColsNum * InstanceRowsNum);
+
+        // Calculate max span
+        XMFLOAT3 span = m_model.GetBounds().GetSpan();
+        float maxSpan = std::max(span.x, span.z);
+
+        // per instance
+        float instanceSpanX = 2.0f * maxSpan;
+        float instanceSpanZ = 4.0f * maxSpan;
+
+        // total span
+        float totalSpanX = InstanceColsNum * instanceSpanX;
+        float totalSpanZ = InstanceRowsNum * instanceSpanZ;
+
+        // Calculate Position
+        for (auto j = 0u; j < InstanceRowsNum; ++j)
+        {
+            for (auto i = 0u; i < InstanceColsNum; ++i)
+            {
+                float x = i * instanceSpanX - (totalSpanX / 2.0f) + instanceSpanX / 2.0f;
+                float y = 0.0f;
+                float z = j * instanceSpanZ - (totalSpanZ / 2.0f) - 2.15f * instanceSpanZ;
+
+                uint32_t index = j * InstanceColsNum + i;
+                m_instances[index] = DirectX::XMMatrixTranslation(x, y, z);
+            }
+        }
+
+        // Write Buffer
+        m_instancesBuffer.Initialize(command, m_instances.size(), sizeof(XMMATRIX), m_instances.data());
+    }
+
     command->Close();
-    
+
     auto graphicsQueue = m_graphicsQueue.lock();
     if (!graphicsQueue) { return false; }
 
@@ -170,11 +195,12 @@ bool SimpleMeshletApp::OnInitialize()
     return true;
 }
 
-bool SimpleMeshletApp::OnTerminate()
+bool SimpleInstancedApp::OnTerminate()
 {
     m_cameraCB.clear();
 
     m_model.Terminate();
+    m_instancesBuffer.Terminate();
 
     m_pso.Terminate();
     m_rootSignature.Terminate();
@@ -182,20 +208,71 @@ bool SimpleMeshletApp::OnTerminate()
     return true;
 }
 
-void SimpleMeshletApp::OnRender()
+void SimpleInstancedApp::OnUpdate(double deltaTime)
+{
+    // Calculate max span
+    XMFLOAT3 span = m_model.GetBounds().GetSpan();
+    float maxSpan = std::max(span.x, span.z);
+
+    // per instance
+    float instanceSpanX = 2.0f * maxSpan;
+    float instanceSpanZ = 4.0f * maxSpan;
+
+    // total span
+    float totalSpanX = InstanceColsNum * instanceSpanX;
+    float totalSpanZ = InstanceRowsNum * instanceSpanZ;
+
+    // Calculate Position
+    for (auto j = 0u; j < InstanceRowsNum; ++j)
+    {
+        for (auto i = 0u; i < InstanceColsNum; ++i)
+        {
+            float x = i * instanceSpanX - (totalSpanX / 2.0f) + instanceSpanX / 2.0f;
+            float y = 0.0f;
+            float z = j * instanceSpanZ - (totalSpanZ / 2.0f) - 2.15f * instanceSpanZ;
+
+            uint32_t index = j * InstanceColsNum + i;
+            double angle = GetGlobalRelativeTime();
+            m_instances[index] = 
+                DirectX::XMMatrixRotationY(angle) * DirectX::XMMatrixTranslation(x, y, z);
+        }
+    }
+
+    // GetQuery
+    D3D12_QUERY_DATA_PIPELINE_STATISTICS1 pipelineStatistics = {};
+    if (GraphicsProxy::HasQuery())
+    {
+        void* pointer = nullptr;
+        GraphicsProxy::GetQueryResource()->Map(0, nullptr, &pointer);
+        memcpy(&pipelineStatistics, pointer, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS1));
+        GraphicsProxy::GetQueryResource()->Unmap(0, nullptr);
+    }
+
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+    ImGui::Begin("Profile");
+    ImGui::Text(std::format("CInvocations: {}", pipelineStatistics.CInvocations).c_str()); ImGui::NextColumn();
+    ImGui::Text(std::format("CPrimitives: {}", pipelineStatistics.CPrimitives).c_str()); ImGui::NextColumn();
+    ImGui::Text(std::format("PSInvocations: {}", pipelineStatistics.PSInvocations).c_str()); ImGui::NextColumn();
+    ImGui::Text(std::format("ASInvocations: {}", pipelineStatistics.ASInvocations).c_str()); ImGui::NextColumn();
+    ImGui::Text(std::format("MSInvocations: {}", pipelineStatistics.MSInvocations).c_str()); ImGui::NextColumn();
+    ImGui::Text(std::format("MSPrimitives: {}", pipelineStatistics.MSPrimitives).c_str()); ImGui::NextColumn();
+    ImGui::End();
+}
+
+void SimpleInstancedApp::OnRender()
 {
     uint32_t index = GetCurrentBackBufferIndex();
-    {
-        constexpr auto fovY = DirectX::XMConvertToRadians(37.5f);
-        auto aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
 
-        XMMATRIX m_view = m_camera.GetView();
-        XMMATRIX m_proj = DirectX::XMMatrixPerspectiveFovRH(fovY, aspect, 0.1f, 1000.0f);
+    const UINT instanceCount = static_cast<UINT>(m_instances.size());
 
-        auto* cb = m_cameraCB[index].MapAs<CameraCBData>();
-        cb->m_mvpMatrix = m_view * m_proj;
-        m_cameraCB[index].UnMap();
-    }
+    // for camera
+    constexpr auto fovY = DirectX::XMConvertToRadians(37.5f);
+    auto aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
+    XMMATRIX view = m_camera.GetView();
+    XMMATRIX proj = DirectX::XMMatrixPerspectiveFovRH(fovY, aspect, 0.1f, 1000.0f);
+    proj = view * proj;
 
     auto graphicsQueue = m_graphicsQueue.lock();
     if (!graphicsQueue) { return; }
@@ -203,10 +280,13 @@ void SimpleMeshletApp::OnRender()
     m_graphicsCommandList.Reset();
     auto command = m_graphicsCommandList.GetD3D12CommandList();
 
+    // update instance
+    GraphicsProxy::UpdateBuffer(command, m_instancesBuffer.GetResource(), m_instances.data());
+    m_instancesBuffer.ChangeState(command, D3D12_RESOURCE_STATE_GENERIC_READ);
+
     // set RootSignature/PSO
     command->SetGraphicsRootSignature(m_rootSignature.Get());
     command->SetPipelineState(m_pso.Get());
-
 
     // set viewport
     command->RSSetViewports(1, &m_viewport);
@@ -232,22 +312,35 @@ void SimpleMeshletApp::OnRender()
     command->ClearDepthStencilView(handleDSV, D3D12_CLEAR_FLAG_DEPTH, m_clearDepth, m_clearStencil, 0, nullptr);
 
     // set descriptor heap table
+    GraphicsProxy::BeginQuery(command);
     for (auto i = 0u; i < m_model.GetMeshCount(); i++)
     {
         auto mesh = m_model.GetMesh(i).lock();
+        UINT meshletCount = mesh->GetMeshletCount();
 
         //camera
-        command->SetGraphicsRootConstantBufferView(0, m_cameraCB[index].GetGpuAddress());
+        command->SetGraphicsRoot32BitConstants(0, 16, &proj, 0);
+        command->SetGraphicsRoot32BitConstants(0, 1, &instanceCount, 16);
+        command->SetGraphicsRoot32BitConstants(0, 1, &meshletCount, 17);
 
         // meshlet
         command->SetGraphicsRootShaderResourceView(1, mesh->GetPositions().GetGpuAddress());
         command->SetGraphicsRootShaderResourceView(2, mesh->GetMeshlets().GetGpuAddress());
         command->SetGraphicsRootShaderResourceView(3, mesh->GetUniqueVertexIndices().GetGpuAddress());
         command->SetGraphicsRootShaderResourceView(4, mesh->GetPrimitiveIndices().GetGpuAddress());
+        command->SetGraphicsRootShaderResourceView(5, m_instancesBuffer.GetGpuAddress());
 
         // Draw
-        command->DispatchMesh(static_cast<UINT>(mesh->GetMeshletCount()), 1, 1);
+        UINT threadGroupCountX = static_cast<UINT>((meshletCount * instanceCount) / 32) + 1;
+        command->DispatchMesh(threadGroupCountX, 1, 1);
     }
+    GraphicsProxy::EndQuery(command);
+
+    // ResolveQuery
+    GraphicsProxy::ResolveQuery(command);
+
+    // Imgui
+    ImguiManager::Instance().Draw(command);
 
     // set resource barrier : RenderTarget -> Present
     m_colorTarget[index].ChangeState(command, D3D12_RESOURCE_STATE_PRESENT);
