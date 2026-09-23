@@ -111,7 +111,7 @@ void ResourceModel::ParseMesh(const aiScene* scene)
 
         if (GraphicsProxy::IsUseMeshlet())
         {
-            ConstructMeshletBoundingSphere(resourceMesh.get());
+            ConstructMeshletFromOptimizer(resourceMesh.get());
         }
 
         m_meshes[k] = resourceMesh;
